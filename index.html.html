@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linebook — Turbo Local Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+:root{
+  --ink:#0f0d0b;
+  --bg:#15120f;
+  --bg-grad: radial-gradient(1200px 700px at 15% -10%, #1c1712 0%, #15120f 55%);
+  --panel:#1c1814;
+  --panel-2:#201c17;
+  --panel-line: #34291b;
+  --panel-line-soft: #2a221a;
+  --paper:#f1e8d4;
+  --paper-dim:#c9bfa9;
+  --sq-light:#f0d9b5;
+  --sq-dark:#b58863;
+  --sq-dark-deep:#7a4f2e;
+  --gold:#c99a45;
+  --gold-bright:#e0b562;
+  --gold-dim: #8a6c37;
+  --text:#efe6d3;
+  --text-dim:#a89d87;
+  --text-faint:#6e6759;
+  --red:#b1503f;
+  --last-move: rgba(246,246,105,0.55);
+  --check-glow: rgba(220,70,55,0.65);
+  --radius: 4px;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg-grad), var(--bg);
+  color:var(--text);
+  font-family:'IBM Plex Sans', sans-serif;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{ max-width:1220px; margin:0 auto; padding: 28px 20px 60px; }
+header.top{ display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid var(--panel-line); padding-bottom:18px; margin-bottom:22px; flex-wrap:wrap; gap:14px; }
+.brand{ display:flex; align-items:center; gap:14px; }
+header.top h1{ font-family:'Fraunces', serif; font-weight:600; font-size:2.25rem; margin:0; color:var(--paper); line-height:1; }
+header.top h1 span{ color: var(--gold); font-style:italic; font-weight:500;}
+header.top .tag{ font-size:0.82rem; color:var(--text-dim); font-family:'IBM Plex Mono', monospace; margin-top:6px; }
+.header-right{ display:flex; gap:22px; align-items:baseline; }
+.mini-stat{ text-align:right; }
+.mini-stat .n{ font-family:'Fraunces', serif; font-weight:600; font-size:1.5rem; color:var(--gold-bright); display:block; }
+.mini-stat .l{ font-family:'IBM Plex Mono', monospace; font-size:0.65rem; color:var(--text-faint); }
+
+.layout{ display:grid; grid-template-columns: 400px 1fr; gap: 22px; align-items:start; }
+@media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } }
+
+.ledger-col{ background:linear-gradient(180deg, var(--panel-2), var(--panel)); border:1px solid var(--panel-line); border-radius:var(--radius); padding:18px; }
+.upload-row{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.btn{ background:transparent; border:1px solid var(--panel-line); color:var(--text); font-family:'IBM Plex Mono', monospace; font-size:0.72rem; padding:8px 12px; border-radius:var(--radius); cursor:pointer; }
+.btn:hover{ border-color:var(--gold); color:var(--paper); }
+.btn.primary{ border-color:var(--gold-dim); color:var(--paper); background:rgba(201,154,69,0.08); }
+.btn.danger:hover{ border-color:var(--red); color:#e6a89c; }
+.btn:disabled{ opacity:0.35; cursor:default; }
+input[type=file]{ display:none; }
+
+.stat-row{ display:flex; padding: 6px 0 14px; border-bottom:1px solid var(--panel-line); margin-bottom:14px; }
+.stat-block{ flex:1; }
+.stat-block + .stat-block{ border-left:1px solid var(--panel-line); padding-left:16px; margin-left:16px; }
+.stat-block .label{ font-size:0.68rem; color:var(--text-dim); font-family:'IBM Plex Mono', monospace; }
+.stat-block .num{ font-family:'Fraunces', serif; font-weight:600; font-size:1.9rem; color:var(--paper); display:block; margin-top:2px; }
+
+.section-label{ font-family:'IBM Plex Mono', monospace; font-size:0.68rem; color:var(--text-faint); margin: 4px 0 8px; display:flex; justify-content:space-between; }
+.move-row{ display:grid; grid-template-columns: 56px 1fr 54px 60px; align-items:center; gap:8px; padding:7px 6px; border-radius:var(--radius); cursor:pointer; font-family:'IBM Plex Mono', monospace; font-size:0.82rem; }
+.move-row:hover{ background: rgba(201,154,69,0.10); }
+.move-row .san{ color:var(--paper); font-weight:500; }
+.move-row .bar-track{ height:5px; background:var(--panel-line); border-radius:2px; overflow:hidden; }
+.move-row .bar-fill{ height:100%; background: linear-gradient(90deg, var(--gold-dim), var(--gold-bright)); }
+.move-row .count{ color:var(--text-dim); text-align:right; font-size:0.72rem;}
+.move-row .pct{ color:var(--text-dim); text-align:right; font-size:0.72rem;}
+
+.empty-note{ font-size:0.78rem; color:var(--text-faint); font-style:italic; padding: 10px 2px 4px; line-height:1.5; }
+.divider{ height:1px; background:var(--panel-line); margin: 14px 0; }
+
+.games-search{ width:100%; background:var(--panel-2); border:1px solid var(--panel-line); color:var(--text); font-family:'IBM Plex Mono', monospace; font-size:0.72rem; padding:7px 9px; border-radius:var(--radius); margin-bottom:8px; }
+.games-search::placeholder{ color:var(--text-faint); }
+.games-list{ max-height:260px; overflow-y:auto; }
+.game-row{ padding:7px 6px; border-radius:var(--radius); cursor:pointer; font-size:0.78rem; line-height:1.4; }
+.game-row:hover{ background: rgba(201,154,69,0.10); }
+.game-row .players{ color:var(--paper); }
+.game-row .meta{ color:var(--text-faint); font-family:'IBM Plex Mono', monospace; font-size:0.68rem; }
+
+.board-col{ background:linear-gradient(180deg, var(--panel-2), var(--panel)); border:1px solid var(--panel-line); border-radius:var(--radius); padding:22px; }
+.board-toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:8px; }
+.nav-btns{ display:flex; gap:6px; }
+.nav-btns button{ width:34px; height:30px; background:transparent; border:1px solid var(--panel-line); color:var(--paper); border-radius:var(--radius); cursor:pointer; font-family:'IBM Plex Mono', monospace; }
+.board-wrap{ display:flex; justify-content:center; }
+.board-frame{ width: min(100%, 540px); padding:14px; background: linear-gradient(160deg,#3a2c18,#241a0f 60%,#180f08); border-radius:6px; }
+#board{ display:grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); width: 100%; aspect-ratio: 1 / 1; border-radius:2px; overflow:hidden; }
+.sq{ display:flex; align-items:center; justify-content:center; position:relative; cursor:pointer; }
+.sq.light{ background:var(--sq-light); }
+.sq.dark{ background:var(--sq-dark); }
+.sq.selected::after{ content:''; position:absolute; inset:0; background: rgba(201,154,69,0.5); }
+.sq.last-move.light{ background: linear-gradient(var(--last-move), var(--last-move)), var(--sq-light); }
+.sq.last-move.dark{ background: linear-gradient(var(--last-move), var(--last-move)), var(--sq-dark); }
+.sq .piece-img{ width:82%; height:82%; object-fit:contain; }
+
+.board-actions{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+.scoresheet{ margin-top:14px; padding-top:14px; border-top:1px solid var(--panel-line); font-family:'IBM Plex Mono', monospace; font-size:0.8rem; color:var(--text-dim); max-height:110px; overflow-y:auto; }
+.scoresheet .mv{ cursor:pointer; padding:1px 4px; border-radius:2px; }
+.scoresheet .mv.current{ background:var(--gold); color:var(--ink); font-weight:600; }
+.status-line{ margin-top:10px; font-family:'IBM Plex Mono', monospace; font-size:0.72rem; color:var(--text-faint); display:flex; justify-content:space-between; }
+.status-line .toast{ color:var(--gold-bright); opacity:0; transition:opacity .2s ease; }
+.status-line .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div>
+        <h1>Line<span>book</span></h1>
+        <div class="tag">IndexedDB Turbo Storage & Fast Ingestion</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="mini-stat"><span class="n" id="headerTotalGames">0</span><span class="l">games saved locally</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="ledger-col">
+      <div class="upload-row">
+        <button class="btn primary" id="uploadBtn">Upload PGN</button>
+        <button class="btn danger" id="clearAllBtn">Clear all games</button>
+        <input type="file" id="fileInput" accept=".pgn,text/plain" multiple>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-block">
+          <div class="label">games in position</div>
+          <div class="num" id="gamesInPosition">0</div>
+        </div>
+      </div>
+
+      <div class="section-label"><span>moves from position</span></div>
+      <div class="moves-list" id="movesList"></div>
+
+      <div class="divider"></div>
+      <div class="games-panel">
+        <div class="section-label"><span>matching games</span></div>
+        <input type="text" class="games-search" id="gamesSearch" placeholder="filter by player name…">
+        <div class="games-list" id="gamesList"></div>
+      </div>
+    </div>
+
+    <div class="board-col">
+      <div class="board-toolbar">
+        <div class="nav-btns">
+          <button id="btnStart" title="Start">⏮</button>
+          <button id="btnPrev" title="Back">◀</button>
+          <button id="btnNext" title="Forward">▶</button>
+          <button id="btnFlip" title="Flip board">⇅</button>
+        </div>
+        <button class="btn" id="btnReset">Reset board</button>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board-frame"><div id="board"></div></div>
+      </div>
+
+      <div class="board-actions">
+        <button class="btn" id="btnCopyFen">Copy FEN</button>
+        <button class="btn" id="btnCopyPgn">Copy line as PGN</button>
+      </div>
+
+      <div class="status-line">
+        <span id="statusLine">white to move</span>
+        <span class="toast" id="toast"></span>
+      </div>
+
+      <div class="scoresheet" id="scoresheet"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------- INDEXED DB STORAGE ENGINE ----------------
+const DB_NAME = "LinebookDatabase";
+const DB_VERSION = 1;
+let db;
+
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains("games")) {
+        db.createObjectStore("games", { keyPath: "id", autoIncrement: true });
+      }
+    };
+    request.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    request.onerror = (e) => reject(e);
+  });
+}
+
+function saveGamesToDB(gameList) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("games", "readwrite");
+    const store = tx.objectStore("games");
+    gameList.forEach(g => store.add(g));
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e);
+  });
+}
+
+function loadGamesFromDB() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("games", "readonly");
+    const store = tx.objectStore("games");
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+function clearDB() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("games", "readwrite");
+    const store = tx.objectStore("games");
+    const request = store.clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e);
+  });
+}
+
+// ---------------- APP STATE ----------------
+let games = [];
+let live = new Chess();
+let lineMoves = [];
+let ply = 0;
+let selectedSquare = null;
+let boardFlipped = false;
+let lastMove = null;
+
+const $ = (s) => document.querySelector(s);
+
+async function bootApp() {
+  await initDB();
+  games = await loadGamesFromDB();
+  refreshAll();
+}
+
+function pieceImgUrl(color, type){
+  return 'https://chessboardjs.com/img/chesspieces/wikipedia/' + (color === 'w' ? 'w' : 'b') + type.toUpperCase() + '.png';
+}
+
+function renderBoard() {
+  const boardEl = $('#board');
+  boardEl.innerHTML = '';
+  for(let r=0; r<8; r++){
+    for(let f=0; f<8; f++){
+      const rankIdx = boardFlipped ? 7-r : r;
+      const fileIdx = boardFlipped ? 7-f : f;
+      const sqName = 'abcdefgh'[fileIdx] + (8-rankIdx);
+      const isLight = (fileIdx + rankIdx) % 2 === 0;
+
+      const div = document.createElement('div');
+      div.className = 'sq ' + (isLight ? 'light':'dark');
+      if(sqName === selectedSquare) div.classList.add('selected');
+      if(lastMove && (sqName === lastMove.from || sqName === lastMove.to)) div.classList.add('last-move');
+
+      const piece = live.get(sqName);
+      if(piece){
+        const img = document.createElement('img');
+        img.className = 'piece-img';
+        img.src = pieceImgUrl(piece.color, piece.type);
+        div.appendChild(img);
+      }
+      div.addEventListener('click', () => onSquareClick(sqName));
+      boardEl.appendChild(div);
+    }
+  }
+
+  let status = (live.turn() === 'w' ? 'white' : 'black') + ' to move';
+  if(live.in_checkmate()) status = 'checkmate';
+  else if(live.in_check()) status += ' · check';
+  else if(live.in_draw()) status = 'draw';
+  $('#statusLine').textContent = status;
+}
+
+function onSquareClick(sq){
+  if(selectedSquare){
+    const move = live.move({ from: selectedSquare, to: sq, promotion: 'q' });
+    if(move){
+      lineMoves = lineMoves.slice(0, ply);
+      lineMoves.push(move.san);
+      ply = lineMoves.length;
+      selectedSquare = null;
+      refreshAll();
+      return;
+    }
+  }
+  const p = live.get(sq);
+  selectedSquare = (p && p.color === live.turn()) ? sq : null;
+  renderBoard();
+}
+
+function rebuildLive(){
+  live = new Chess();
+  lastMove = null;
+  for(let i=0; i<ply; i++) {
+    const mv = live.move(lineMoves[i]);
+    if(i === ply-1 && mv) lastMove = { from: mv.from, to: mv.to };
+  }
+}
+
+function refreshAll() {
+  rebuildLive();
+  renderBoard();
+  $('#headerTotalGames').textContent = games.length.toLocaleString();
+  renderScoresheet();
+  renderLedger();
+}
+
+function renderScoresheet(){
+  const scoresheetEl = $('#scoresheet');
+  scoresheetEl.innerHTML = '';
+  for(let i=0; i<lineMoves.length; i++){
+    if(i % 2 === 0){
+      const num = document.createElement('span');
+      num.style.color = 'var(--text-faint)';
+      num.textContent = (i/2 + 1) + '. ';
+      scoresheetEl.appendChild(num);
+    }
+    const mv = document.createElement('span');
+    mv.className = 'mv' + (i === ply-1 ? ' current' : '');
+    mv.textContent = lineMoves[i];
+    mv.addEventListener('click', () => { ply = i + 1; refreshAll(); });
+    scoresheetEl.appendChild(mv);
+    scoresheetEl.appendChild(document.createTextNode(' '));
+  }
+}
+
+function renderLedger(){
+  const movesListEl = $('#movesList');
+  const gamesListEl = $('#gamesList');
+  movesListEl.innerHTML = '';
+  gamesListEl.innerHTML = '';
+
+  const filterTerm = $('#gamesSearch').value.toLowerCase();
+
+  const matchingGames = games.filter(g => {
+    if(g.moves.length < ply) return false;
+    for(let i=0; i<ply; i++) if(g.moves[i] !== lineMoves[i]) return false;
+    if(filterTerm){
+      return g.white.toLowerCase().includes(filterTerm) || g.black.toLowerCase().includes(filterTerm);
+    }
+    return true;
+  });
+
+  $('#gamesInPosition').textContent = matchingGames.length.toLocaleString();
+
+  const nextMoveMap = {};
+  matchingGames.forEach(g => {
+    if(g.moves[ply]){
+      nextMoveMap[g.moves[ply]] = (nextMoveMap[g.moves[ply]] || 0) + 1;
+    }
+  });
+
+  Object.entries(nextMoveMap).sort((a,b)=>b[1]-a[1]).forEach(([san, count]) => {
+    const row = document.createElement('div');
+    row.className = 'move-row';
+    const pct = ((count / (matchingGames.length || 1)) * 100).toFixed(1);
+    row.innerHTML = `<div class="san">${san}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><div class="count">${count.toLocaleString()}</div><div class="pct">${pct}%</div>`;
+    row.addEventListener('click', () => {
+      lineMoves = lineMoves.slice(0, ply);
+      lineMoves.push(san);
+      ply++;
+      refreshAll();
+    });
+    movesListEl.appendChild(row);
+  });
+
+  matchingGames.slice(0, 100).forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'game-row';
+    row.innerHTML = `<div class="players">${escapeHtml(g.white)} — ${escapeHtml(g.black)}</div><div class="meta">${escapeHtml(g.result)}</div>`;
+    gamesListEl.appendChild(row);
+  });
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showToast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// ---------------- FAST PGN WORKER PARSER ----------------
+$('#fileInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if(!files.length) return;
+
+  for(let file of files) {
+    const text = await file.text();
+    const rawGames = text.split(/\[Event /g).slice(1);
+    const parsedBatch = rawGames.map(chunk => {
+      const white = (chunk.match(/\[White "(.*?)"\]/) || [])[1] || "Unknown";
+      const black = (chunk.match(/\[Black "(.*?)"\]/) || [])[1] || "Unknown";
+      const result = (chunk.match(/\[Result "(.*?)"\]/) || [])[1] || "*";
+      const movesText = chunk.split(/\n\n/)[1] || "";
+      const moves = movesText.replace(/\{.*?\}/g, '').replace(/\d+\.\.\.|\d+\./g, '').replace(/1-0|0-1|1\/2-1\/2|\*/g, '').trim().split(/\s+/).filter(Boolean);
+      return { white, black, result, moves };
+    });
+
+    await saveGamesToDB(parsedBatch);
+    games.push(...parsedBatch);
+  }
+  refreshAll();
+});
+
+// Event Listeners
+$('#uploadBtn').addEventListener('click', () => $('#fileInput').click());
+$('#clearAllBtn').addEventListener('click', async () => {
+  if(confirm("Permanently delete all stored games?")){
+    await clearDB();
+    games = [];
+    lineMoves = [];
+    ply = 0;
+    refreshAll();
+  }
+});
+
+$('#gamesSearch').addEventListener('input', renderLedger);
+$('#btnPrev').addEventListener('click', () => { if(ply > 0) { ply--; refreshAll(); } });
+$('#btnNext').addEventListener('click', () => { if(ply < lineMoves.length) { ply++; refreshAll(); } });
+$('#btnStart').addEventListener('click', () => { ply = 0; refreshAll(); });
+$('#btnReset').addEventListener('click', () => { lineMoves = []; ply = 0; refreshAll(); });
+$('#btnFlip').addEventListener('click', () => { boardFlipped = !boardFlipped; renderBoard(); });
+
+$('#btnCopyFen').addEventListener('click', () => {
+  navigator.clipboard.writeText(live.fen());
+  showToast('FEN copied');
+});
+$('#btnCopyPgn').addEventListener('click', () => {
+  navigator.clipboard.writeText(lineMoves.join(' '));
+  showToast('PGN copied');
+});
+
+bootApp();
+</script>
+</body>
+</html>
